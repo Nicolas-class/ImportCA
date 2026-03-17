@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <PackageReference Include="fluentftp" Version="53.0.2" />
-    <PackageReference Include="microsoft.extensions.logging" Version="10.0.5" />
     <PackageReference Include="system.data.sqlite.core" Version="1.0.119" />
   </ItemGroup>
 
