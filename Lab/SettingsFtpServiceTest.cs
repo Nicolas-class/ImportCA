@@ -10,14 +10,28 @@ namespace Lab
         [TestMethod]
         public void TestInit()
         {
-            
-        }
+			ApplicationFtpService.Init();
+		}
 
         [TestMethod]
-        public void TestLoad()
+        public async Task TestLoad()
         {
-            var opt = new FtpImportSettings();
-        }
+			using var ftpsv = new ImportFtpService(ApplicationFtpService.GetJson());
+			
+			try
+			{
+				var dir = await ftpsv.ImportFile(
+				ftpUser: "anonymous",
+				ftpPass: "",
+				localDirectory: null,
+				fileName: null,
+				true);
+			}
+			finally
+			{
+				ftpsv.Dispose();
+			}
+		}
 
         [TestMethod]
         public void MiscTest()

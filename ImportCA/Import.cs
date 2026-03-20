@@ -4,296 +4,241 @@ using System.Data.SQLite;
 using FluentFTP;
 using System.Text.Json.Serialization;
 using FluentFTP.Exceptions;
-using System.Data;
+using System.IO.Compression;
 
 namespace ImportCA
 {
 
-    //Parâmetros de importação.
-    public class FtpImportSettings
-    {
+	//Importação do arquivo ftp.
+	public class ImportFtpService : IDisposable
+	{
+		private const string DefaultCredentials = "anonymous";
+		private bool _disposed = false;
+		private string _tmpFolderPath = string.Empty;
+		private FtpSettingsJson? _settingsJson = null;
 
-        #region "Campos"
-        
-        private string _host = "ftp.mtps.gov.br";
+		public ImportFtpService(FtpSettingsJson settingsJson)
+		{
+			this._settingsJson = settingsJson ?? throw new ArgumentNullException(nameof(settingsJson));
+		}
 
-        private string _remoteDirectory = "portal/fiscalizacao/seguranca-e-saude-no-trabalho/caepi/";
+		public void Dispose()
+		{
+			if (this._disposed)
+				return;
 
-        private string _remoteFileName = "tgg_export_caepi";
+			DeleteTempFolder();
 
-        private string _expectedRemoteExtension = ".zip";
+			this._disposed = true;
+		}
 
-        private bool _extractIfCompressed = false;
+		//Cria uma pasta temporária para realizar as devidas operações.
+		private void CreateTempFolder()
+		{
+			//Apagando o diretório temporário anterior caso existir.
+			DeleteTempFolder();
 
-        private string _expectedInternalExtension = ".txt";
+			var dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
 
-        private string _internalFileName = "tgg_export_caepi";
+			this._tmpFolderPath = dir.FullName;
+		}
 
-        private string _delimiter = "|";
-        #endregion
+		//Apaga a pasta temporária.
+		private void DeleteTempFolder()
+		{
+			//Se a pasta anterior ainda existir, será apagada.
+			if (!Directory.Exists(this._tmpFolderPath))
+				return;
 
-        #region "Propriedades"
+			try
+			{
+				Directory.Delete(this._tmpFolderPath,true);
+			}
+			finally
+			{
+				this._tmpFolderPath = string.Empty;
+			}
+		}
+		
+		private enum checkInvalidChars { path, filename };
 
-        /// <summary>
-        /// Nome do servidor FTP.
-        /// </summary>
-        [JsonPropertyName("host")]
-        public string HostFtpServer { get => this._host; set => this._host = value; }
-        
-        /// <summary>
-        /// Diretório do arquivo do servidor.
-        /// </summary>
-        [JsonPropertyName("remote_directory")]
-        public string RemoteDirectory { get => this._remoteDirectory; set => this._remoteDirectory = value; }
+		//Verifica se o diretório ou caminho do arquivo informado, contém caractéres inválidos.
+		private static bool HasInvalidChars(string fileOrDirectory, ImportFtpService.checkInvalidChars check) => check switch
+		{
+			checkInvalidChars.path => (string.IsNullOrEmpty(fileOrDirectory) || fileOrDirectory.IndexOfAny(Path.GetInvalidPathChars()) >= 0),
+			checkInvalidChars.filename => (string.IsNullOrEmpty(fileOrDirectory) || fileOrDirectory.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0),
+		};
 
-        /// <summary>
-        /// Nome do arquivo salvo dentro do servidor.
-        /// </summary>
-        [JsonPropertyName("remote_file_name")]
-        public string RemoteFileName { get => this._remoteFileName; set => this._remoteFileName = value; }
+		//Lança uma exceção se as credenciais para conexão ftp não forem preenchidas corretamente.
+		private static void CheckCredentials(string ftpUser, string ftpPass)
+		{
+			if (string.IsNullOrEmpty(ftpUser))
+				throw new ArgumentNullException("Nome de usuário é obrigatório.");
 
-        /// <summary>
-        /// Extensão do arquivo FTP esperada pelo software.
-        /// </summary>
-        [JsonPropertyName("expected_remote_extension")]
-        public string ExpectedRemoteExtension { get => this._expectedRemoteExtension; set => this._expectedRemoteExtension = value; }
+			if (ftpUser != "anonymous" && string.IsNullOrEmpty(ftpPass))
+				throw new ArgumentNullException("A senha é obrigatória para usuários não-anônimos.");
+		}
 
-        /// <summary>
-        /// Extrair se o arquivo estiver compactado.
-        /// </summary>
-        [JsonPropertyName("extract_if_compressed")]
-        public bool ExtractIfCompressed { get => this._extractIfCompressed; set => this._extractIfCompressed = value; }
+		//Conecta-se ao servidor FTP e baixa o arquivo.
+		private static async Task<bool> AsyncCheckFtpConnection(FtpSettingsJson appSettings, string ftpUser = ImportFtpService.DefaultCredentials, string ftpPass = ImportFtpService.DefaultCredentials)
+		{
+			CheckCredentials(ftpUser, ftpPass);
 
+			try
+			{
+				using (var ftpClient = new AsyncFtpClient(appSettings.HostFtpServer, ftpUser, ftpPass))
+				{
+					ftpClient.Config.ConnectTimeout = 5000;
+					await ftpClient.AutoConnect();
 
-        /// <summary>
-        /// Extensão esperada dentro do arquivo compactado.
-        /// </summary>
-        /// <exception cref="ArgumentException"></exception>
-        [JsonPropertyName("expected_internal_extension")]
-        public string ExpectedInternalExtension 
-        { 
-            get => this._expectedInternalExtension; 
-            set
-            {
-                //Verificando se a extensão especficada é suportada pela aplicação
-                if(!FtpImportSettings.SupportedExtensions.Contains(value, StringComparer.OrdinalIgnoreCase))
-                {
-                    throw new ArgumentException($"Extensão: \"{value}\" não é suportada pelo software.");
-                }
+					return ftpClient.IsConnected;
+				}
 
-                this._expectedInternalExtension = value;
-            } 
-        }
+			}
+			catch
+			{
+				return false;
+			}
 
-        [JsonPropertyName("internal_file_name")]
-        public string InternalFileName { get => this._internalFileName; set => this._internalFileName = value; }
+		}
 
-        [JsonPropertyName("delimiter")]
-        public string Delimiter { get => this._delimiter; set => this._delimiter = value; }
-        
-        #endregion
+		//Verifica se o arquivo informado está compactado.
+		private bool IsCompressedFile(string path)
+		{
+			try
+			{
+				using (var file = ZipFile.OpenRead(path))
+				{
+					var entries = file.Entries;
+					return true;
+				}
+			}
+			catch
+			{
+				return false;
+			}
+		}
 
-        public static readonly string[] SupportedExtensions = ".csv;.xlsx;.txt;.sqlite".Split(";");
+		//Função que faz a montagem do caminho completo do arquivo à ser movido.
+		private static string SolvePath(FtpSettingsJson appFtp, string? directory = null, string? fileName = null)
+		{
+			directory ??= Directory.GetCurrentDirectory();
+			fileName ??= appFtp.InternalFileName + appFtp.ExpectedInternalExtension;
 
-        public enum ExtensionIndex : int {CSV,XLSX,TXT,SQLITE,DEFAULT = 0};
+			//Exceção se o diretório informado conter caractéres inválidos.
+			if (ImportFtpService.HasInvalidChars(directory,checkInvalidChars.path))
+				throw new ArgumentException("O diretório informado contém caractéres inválidos.");
 
-        private readonly static string SettingsFileName = Path.Combine(Directory.GetCurrentDirectory(),"app_settings.Json");
+			//Exceção se o nome do arquivo informado conter caractéres inválidos.
+			if (ImportFtpService.HasInvalidChars(fileName, checkInvalidChars.filename))
+				throw new ArgumentException("O nome do arquivo informado contém caractéres inválidos.");
 
-        /// <summary>
-        /// Cria um arquivo de configuração da aplicação.
-        /// </summary>
-        /// <param name="overwriteFile">
-        /// Especificar se deve ou não sobreescrever um arquivo com o mesmo nome caso existir.
-        /// </param>
-        public static void Init(bool overwriteFile = true)
-        {
-            string jsonContent = JsonSerializer.Serialize(new FtpImportSettings(), new JsonSerializerOptions()
-            {
-                WriteIndented = true
-            });
-            
-            File.WriteAllText(FtpImportSettings.SettingsFileName,jsonContent);
-        }
+			//Exceção se o caminho informado corresponde a um arquivo existente.
+			if (File.Exists(directory))
+				throw new ArgumentException("O caminho informado corresponde a um arquivo existente. Informe um diretório válido.");
 
-        //Obtendo informações do arquivo de configuração.
-        public static FtpImportSettings GetJson()
-        {
-            //Verificando se já existe um arquivo de configuração
-            if (!File.Exists(FtpImportSettings.SettingsFileName))
-            {
-                throw new InvalidOperationException("O arquivo de configuração da aplicação não foi inicializado antes do uso.");
-            }
-                
-            return JsonSerializer.Deserialize<FtpImportSettings>(File.ReadAllText(FtpImportSettings.SettingsFileName), new JsonSerializerOptions()
-            {
-                PropertyNameCaseInsensitive = true
-            }) ?? throw new InvalidOperationException("Falha ao carregar as configurações.");
-            
-        }
-    }
+			fileName = (Path.HasExtension(fileName) || Path.GetExtension(fileName) != appFtp.ExpectedInternalExtension) ?
+			Path.GetFileNameWithoutExtension(fileName) + appFtp.ExpectedInternalExtension :
+			Path.GetFileNameWithoutExtension(fileName) + ApplicationFtpService.SupportedExtensions[(int)ApplicationFtpService.ExtensionIndex.DEFAULT];
 
-    //Importação do arquivo ftp.
-    public class ImportFtpService: IDisposable
-    {   
-        
-        private const string DefaultCredentials = "anonymous";
-        private bool _disposed = false;
-        private string _tmpFolderPath = string.Empty;
-        
-        public void Dispose()
-        {
-            if(this._disposed)
-            {
-                return;
-            }
+			return Path.Combine(directory, fileName);
+		}
 
-            DeleteTempFolder();
-        }
+		//private ZipArchiveEntry FindInternalFile()
+		//{
 
-        private void CreateTempFolder()
-        {
-            DeleteTempFolder();
+		//}
+		
 
-            var dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+		/// <summary>
+		/// Realiza a importação do arquivo do servidor FTP do governo.
+		/// </summary>
+		/// <param name="ftpUser">Usuário</param>
+		/// <param name="ftpPass">Senha</param>
+		/// <param name="localDirectory">Diretório onde o arquivo deve ser baixado.</param>
+		/// <param name="fileName">Novo nome do arquivo.</param>
+		/// <param name="overwriteFile">Sobreescrever o arquivo existente.</param>
+		/// <returns>Caminho completo para o arquivo importado.</returns>
+		/// <exception cref="InvalidOperationException"></exception>
+		/// <exception cref="DirectoryNotFoundException"></exception>
+		public async Task<string> ImportFile(string ftpUser = ImportFtpService.DefaultCredentials, string ftpPass = ImportFtpService.DefaultCredentials, string? localDirectory = null, string? fileName = null, bool overwriteFile = false)
+		{
+            if (this._settingsJson is null)
+				throw new InvalidOperationException("Settings object is not set. Please set the FtpSettings property before calling this method.");
 
-            this._tmpFolderPath = dir.FullName;
-        }
+			CheckCredentials(ftpUser, ftpPass);
 
-        private void DeleteTempFolder()
-        {
-            if (!Directory.Exists(this._tmpFolderPath))
-            {
-                return;
-            }
+			//Obtendo o caminho completo do arquivo a ser movido.
+			string fullPath = SolvePath(this._settingsJson, localDirectory, fileName);
+			
+			if (!await ImportFtpService.AsyncCheckFtpConnection(this._settingsJson, ftpUser, ftpPass))
+				throw new FtpException($"Não foi possível conectar-se ao servidor \"{this._settingsJson.HostFtpServer}\" informado no arquivo de configuração.");
 
-            try
-            {
-                Directory.Delete(this._tmpFolderPath);
-            } 
-            catch
-            {
-                this._tmpFolderPath = string.Empty;
-            }
-        }
+			using (var ftp = new AsyncFtpClient(this._settingsJson.HostFtpServer, ftpUser, ftpPass))
+			{
+				ftp.Config.ConnectTimeout = ApplicationFtpService.FtpConnectTimeout;
+				await ftp.AutoConnect();
 
-        //Verifica se o diretório ou caminho do arquivo informado, contém caractéres inválidos.
-        public static bool PathHasInvalidChars(string path)
-        {
-            return (string.IsNullOrEmpty(path) && path.IndexOfAny(Path.GetInvalidPathChars()) >= 0);
-        }
+				//Lança exceção se não existir nenhum diretório dentro do servidor informado pelo arquivo de configuração.
+				if (!await ftp.DirectoryExists(this._settingsJson.RemoteDirectory))
+					throw new DirectoryNotFoundException($"O diretório informado não existe dentro do servidor \"{this._settingsJson.HostFtpServer}\"");
+					
+				//Obtendo a listagem do nome de todos os arquivos dentro do diretório
+				var items = await ftp.GetListing(this._settingsJson.RemoteDirectory);
 
-        //Lança uma exceção se as credenciais para conexão ftp não forem preenchidas corretamente.
-        private static void CheckCredentials(string ftpUser, string ftpPass)
-        {
-            if (string.IsNullOrEmpty(ftpUser))
-            {
-                throw new ArgumentNullException("Nome de usuário é obrigatório.");
-            }
+				//Lança exceção se não existir nenhum arquivo dentro do diretório informado pelo arquivo de configuração.
+				if (items.Length <= 0)
+					throw new InvalidOperationException($"Não existe nenhum arquivo no diretório \"{this._settingsJson.RemoteDirectory}\".");
 
-            if (ftpUser != "anonymous" && string.IsNullOrEmpty(ftpPass))
-            {
-                throw new ArgumentNullException("A senha é obrigatória para usuários não-anônimos.");
-            }
-        }
-        
-        //Conecta-se ao servidor FTP e baixa o arquivo.
-        private static async Task<bool> AsyncCheckFtpConnection(FtpImportSettings appFtp, string ftpUser = ImportFtpService.DefaultCredentials, string ftpPass = ImportFtpService.DefaultCredentials)
-        {
-            CheckCredentials(ftpUser, ftpPass);
-            
-            using(var ftpClient = new AsyncFtpClient())
-            {
-                try
-                {
-                    ftpClient.Host = appFtp.HostFtpServer;
-                    ftpClient.Config.ConnectTimeout = 5000;
-                    ftpClient.Credentials = new System.Net.NetworkCredential()
-                    {
-                        UserName = ftpUser,
-                        Password = ftpPass  
-                    };
+				//Localizando o primeiro arquivo com o nome informado no arquivo de configuração, ignorando letras maiúsculas ou minúsculas.
+				var file = items.FirstOrDefault((x) =>
+					x.Type == FtpObjectType.File && x.Name.Contains(this._settingsJson.RemoteFileName, StringComparison.OrdinalIgnoreCase)
+				) ??
+					throw new FileNotFoundException($"Não foi possível localizar o arquivo \"{this._settingsJson.RemoteFileName}\".");
 
-                    var res = await ftpClient.AutoConnect();
+				//Obtendo a extensão do arquivo localizado.
+				string remotefileExtension = Path.GetExtension(file.Name) ?? 
+												throw new NotSupportedException("O arquivo informado não contém nenhuma extensão definida.");
 
-                    if (!ftpClient.IsConnected)
-                    {
-                        return false;
-                    }
+				if (remotefileExtension is null || remotefileExtension != this._settingsJson.ExpectedRemoteExtension)
+					throw new NotSupportedException($"O arquivo localiado \"{file.Name}\" contém uma extensão inválida ou não é suportada pelo software.");
 
-                    return true;
+				this.CreateTempFolder();
 
-                } catch(FtpException)
-                {
-                    return false;
-                }
-                finally
-                {
-                    await ftpClient.Disconnect();
-                }
-            }
-        }
+				//Caminhho para o arquivo baixo temporariamente
+				string tmpDownloadedPath = Path.Combine(this._tmpFolderPath, Path.GetFileNameWithoutExtension(Path.GetRandomFileName()) + this._settingsJson.ExpectedRemoteExtension);
 
-        private static string SolvePath(FtpImportSettings appFtp, string? directory = null, string? fileName = null)
-        {
-            directory ??= Directory.GetCurrentDirectory();
-            fileName ??= appFtp.InternalFileName + appFtp.ExpectedInternalExtension;
+				FtpStatus downloadResult = await ftp.DownloadFile(tmpDownloadedPath, file.FullName, verifyOptions: FtpVerify.OnlyVerify);
+				
+				if (downloadResult != FtpStatus.Success)
+					throw new FtpException("Ocorreu um erro durante o download do arquivo. Por favor, tente novamente mais tarde.");
 
-            fileName = (Path.HasExtension(fileName) || Path.GetExtension(fileName) != appFtp.ExpectedInternalExtension) ?  
-            Path.GetFileNameWithoutExtension(fileName) + appFtp.ExpectedInternalExtension :
-            Path.GetFileNameWithoutExtension(fileName) + FtpImportSettings.SupportedExtensions[(int)FtpImportSettings.ExtensionIndex.DEFAULT];
+				if (this.IsCompressedFile(tmpDownloadedPath))
+				{
+					using(var packed = ZipFile.OpenRead(tmpDownloadedPath))
+					{
+						var inFile = packed.Entries.FirstOrDefault(x =>
+							
+							x.Name.Contains(this._settingsJson.InternalFileName, StringComparison.OrdinalIgnoreCase)
 
-            //Exceção se o diretório informado conter caractéres inválidos.
-            if (ImportFtpService.PathHasInvalidChars(directory))
-                throw new ArgumentException("O diretório informado contém caractéres inválidos.");
+						) ?? throw new FileNotFoundException("");
+						
+						string unpackedFilePath = Path.Combine(this._tmpFolderPath, inFile.Name);
 
-            //Exceção se o nome do arquivo informado conter caractéres inválidos.
-            if (ImportFtpService.PathHasInvalidChars(fileName))
-                throw new ArgumentException("O nome do arquivo informado contém caractéres inválidos.");
+						inFile.ExtractToFile(unpackedFilePath);
 
-            //Exceção se o caminho informado corresponde a um arquivo existente.
-            if(File.Exists(directory))
-                throw new ArgumentException("O caminho informado corresponde a um arquivo existente. Informe um diretório válido.");
+						if (!ApplicationFtpService.IsSupportedExtension(Path.GetExtension(unpackedFilePath)))
+							throw new NotSupportedException($"A extensão do arquivo \"{Path.GetExtension(unpackedFilePath)}\" não é suportada pelo software.");
 
-            return Path.Combine(directory,fileName);
-        }
+						File.Move(unpackedFilePath, fullPath);
+					}
 
-        public async Task<string> ImportFile(string ftpUser = ImportFtpService.DefaultCredentials, string ftpPass = ImportFtpService.DefaultCredentials, string? directory = null, string? fileName = null, bool overwriteFile = false)
-        {
-            FtpImportSettings appFtp = FtpImportSettings.GetJson();
+					File.Delete(tmpDownloadedPath);
+				}
 
-            CheckCredentials(ftpUser, ftpPass);
+			}
 
-            string fullPath = SolvePath(appFtp, directory, fileName);
-
-            if (await ImportFtpService.AsyncCheckFtpConnection(appFtp, ftpUser, ftpPass))
-            {
-                throw new InvalidOperationException($"Não foi possível conectar-se ao servidor \"{appFtp.HostFtpServer}\" informado no arquivo de configuração.");
-            }
-
-            try
-            {
-                using(var ftp = new AsyncFtpClient(appFtp.HostFtpServer, ftpUser, ftpPass))
-                {
-                    await ftp.AutoConnect();
-                    if (!await ftp.DirectoryExists(appFtp.RemoteDirectory))
-                    {
-                        throw new ArgumentException($"O diretório informado não existe dentro do servidor \"{appFtp.HostFtpServer}\"");
-                    }
-
-                    var ftpDirList = await ftp.GetListing(appFtp.RemoteDirectory);
-
-                    foreach(var ftpItem in ftpDirList)
-                    {
-                        
-                    }
-                }
-            }
-            catch
-            {
-                
-            }
-
-            return string.Empty;
-        }
-    }
+			return fullPath;
+		}
+	}
 }
