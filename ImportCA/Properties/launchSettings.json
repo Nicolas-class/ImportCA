@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ImportCA": {
+      "commandName": "Project",
+      "commandLineArgs": "import"
+    }
+  }
+}

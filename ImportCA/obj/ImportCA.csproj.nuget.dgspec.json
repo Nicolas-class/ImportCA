@@ -1,20 +1,24 @@
 {
   "format": 1,
   "restore": {
-    "F:\\Projetos\\ImportCA\\ImportCA\\ImportCA\\ImportCA.csproj": {}
+    "C:\\Users\\compras1\\Desktop\\ImportCA\\ImportCA\\ImportCA.csproj": {}
   },
   "projects": {
-    "F:\\Projetos\\ImportCA\\ImportCA\\ImportCA\\ImportCA.csproj": {
+    "C:\\Users\\compras1\\Desktop\\ImportCA\\ImportCA\\ImportCA.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "F:\\Projetos\\ImportCA\\ImportCA\\ImportCA\\ImportCA.csproj",
+        "projectUniqueName": "C:\\Users\\compras1\\Desktop\\ImportCA\\ImportCA\\ImportCA.csproj",
         "projectName": "ImportCA",
-        "projectPath": "F:\\Projetos\\ImportCA\\ImportCA\\ImportCA\\ImportCA.csproj",
-        "packagesPath": "C:\\Users\\nicol\\.nuget\\packages\\",
-        "outputPath": "F:\\Projetos\\ImportCA\\ImportCA\\ImportCA\\obj\\",
+        "projectPath": "C:\\Users\\compras1\\Desktop\\ImportCA\\ImportCA\\ImportCA.csproj",
+        "packagesPath": "C:\\Users\\compras1\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\compras1\\Desktop\\ImportCA\\ImportCA\\obj\\",
         "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
         "configFilePaths": [
-          "C:\\Users\\nicol\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\compras1\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
@@ -22,6 +26,7 @@
         ],
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "C:\\Program Files\\dotnet\\library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -40,7 +45,7 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "10.0.200"
+        "SdkAnalysisLevel": "9.0.200"
       },
       "frameworks": {
         "net9.0": {
@@ -71,7 +76,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.200/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

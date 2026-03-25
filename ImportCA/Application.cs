@@ -12,7 +12,7 @@ namespace ImportCA
 	{
 
 		//Formatos de arquivos suportados.
-		public static readonly string[] SupportedExtensions = ".csv;.xlsx;.txt;.sqlite".Split(";");
+		public static readonly string[] SupportedExtensions = ".txt;.csv;.xlsx;.sqlite".Split(";");
 		
 		public enum ExtensionIndex : int { TXT, CSV, XLSX, SQLITE, DEFAULT = 0 };
 
@@ -28,7 +28,7 @@ namespace ImportCA
 		public const int FtpConnectTimeout = 10000;
 
 		//Diretório do arquivo FTP
-		private readonly static string _settingsFileName = Path.Combine(Directory.GetCurrentDirectory(), "app_settings.Json");
+		private readonly static string _settingsFileName = Path.Combine(Directory.GetCurrentDirectory(), "app_settings.json");
         private readonly static string _recoveredDir = Path.Combine(Directory.GetCurrentDirectory(), "recovered");
         private readonly static string _downloadsDir = Path.Combine(Directory.GetCurrentDirectory(), "downloads");
 
@@ -65,15 +65,11 @@ namespace ImportCA
 		{
 			string jsonContent = JsonSerializer.Serialize(new FtpSettingsJson(), new JsonSerializerOptions()
 			{
-				WriteIndented = true
+				WriteIndented = true,
+                PropertyNameCaseInsensitive = true
 			});
-            
-            string downloadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "downloads");
-            string recoveredFolder = Path.Combine(Directory.GetCurrentDirectory(), "recovered");
 
 			File.WriteAllText(ApplicationFtpService._settingsFileName, jsonContent);
-
-            CreateDownloadsFolder();
 
 		}
 
@@ -88,24 +84,9 @@ namespace ImportCA
 			return JsonSerializer.Deserialize<FtpSettingsJson>(File.ReadAllText(ApplicationFtpService._settingsFileName), new JsonSerializerOptions()
 			{
 				PropertyNameCaseInsensitive = true
-			}) ?? throw new InvalidOperationException("Falha ao carregar as configurações.");
+			}) ?? 
+                throw new InvalidOperationException("Falha ao carregar as configurações.");
 
-		}
-
-        public static string? CreateDownloadsFolder()
-        {
-            try
-            {
-                string downloadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "downloads");
-                if (!Directory.Exists(downloadsFolder))
-                    Directory.CreateDirectory(downloadsFolder);
-                return downloadsFolder;
-
-            }
-            catch
-            {
-                throw new IOException("Falha ao criar a pasta de downloads.");
-            }
 		}
 	}
 
@@ -115,11 +96,11 @@ namespace ImportCA
 
         private string _host = "ftp.mtps.gov.br";
 
-        private string _remoteDirectory = "portal/fiscalizacao/seguranca-e-saude-no-trabalho/caepi/";
+        private string _hostDirectory = "portal/fiscalizacao/seguranca-e-saude-no-trabalho/caepi/";
 
-        private string _remoteFileNameContains = "tgg_export_caepi";
+        private string _hostFileNameContains = "tgg_export_caepi";
 
-        private string _expectedRemoteExtension = ".zip";
+        private string _expectedHostFileExtension = ".zip";
 
         private bool _extractIfCompressed = false;
 
@@ -141,20 +122,20 @@ namespace ImportCA
         /// <summary>
         /// Diretório do arquivo do servidor.
         /// </summary>
-        [JsonPropertyName("remote_directory")]
-        public string RemoteDirectory { get => this._remoteDirectory; set => this._remoteDirectory = value; }
+        [JsonPropertyName("host_directory")]
+        public string HostDirectory { get => this._hostDirectory; set => this._hostDirectory = value; }
 
         /// <summary>
         /// Nome do arquivo salvo dentro do servidor.
         /// </summary>
-        [JsonPropertyName("remote_file_name")]
-        public string RemoteFileName { get => this._remoteFileNameContains; set => this._remoteFileNameContains = value; }
+        [JsonPropertyName("host_file_name")]
+        public string HostFileName { get => this._hostFileNameContains; set => this._hostFileNameContains = value; }
 
         /// <summary>
         /// Extensão do arquivo FTP esperada pelo software.
         /// </summary>
-        [JsonPropertyName("expected_remote_extension")]
-        public string ExpectedRemoteExtension { get => this._expectedRemoteExtension; set => this._expectedRemoteExtension = value; }
+        [JsonPropertyName("expected_host_file_extension")]
+        public string ExpectedHostFileExtension { get => this._expectedHostFileExtension; set => this._expectedHostFileExtension = value; }
 
         /// <summary>
         /// Extrair se o arquivo estiver compactado.
@@ -179,8 +160,8 @@ namespace ImportCA
         [JsonPropertyName("internal_file_name")]
         public string InternalFileName { get => this._internalFileNameContains; set => this._internalFileNameContains = value; }
 
-        [JsonPropertyName("delimiter")]
-        public string Delimiter { get => this._delimiter; set => this._delimiter = value; }
+        [JsonPropertyName("delimiter_convert")]
+        public string DelimiterConvert { get => this._delimiter; set => this._delimiter = value; }
 
         #endregion
     }

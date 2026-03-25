@@ -17,7 +17,13 @@ namespace Lab
         [TestMethod]
         public async Task TestLoad()
         {
-			using var ftpsv = new ImportFtpService(ApplicationFtpService.GetJson());
+			using var ftpsv = new ImportFtpService(ApplicationFtpService.GetJson(), new Progress<ImportProgress>(x =>
+			{
+				if (x.Step == ImportProgress.ImportStep.Download)
+					Console.Write(x.Message);
+				else
+					Console.WriteLine(x.Message);
+			}));
 			
 			try
 			{

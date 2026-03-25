@@ -6,6 +6,8 @@ using ImportCA;
 RootCommand root = new RootCommand("Pipeline importação e gerenciamento da base de dados nacional.");
 
 var init = new Command("init", "Inicializa a base de dados nacional.");
+
+#region "Import"
 var import = new Command("import", "Importa um arquivo para a base de dados nacional.");
 
 var optUser = new Option<string>("--user", "-u") { Description = "Username." };
@@ -19,6 +21,9 @@ import.Options.Add(optPassword);
 import.Options.Add(optLocalDir);
 import.Options.Add(optFileName);
 import.Options.Add(optOverwrite);
+#endregion
+
+
 
 init.SetAction((x) =>
 {
@@ -27,16 +32,25 @@ init.SetAction((x) =>
 
 import.SetAction(async a =>
 {
-	using(var ftp = new ImportFtpService(ApplicationFtpService.GetJson()))
+	Progress<ImportProgress> ImportPgr = new Progress<ImportProgress>(x =>
+	{
+		if (x.Step == ImportProgress.ImportStep.Download)
+			Console.Write($"\r{x.Message}");
+		else
+			Console.WriteLine(x.Message);
+    });
+
+
+	using(var ftp = new ImportFtpService(ApplicationFtpService.GetJson(), ImportPgr))
 	{
 		try
 		{
 			string res = await ftp.ImportFile(
-			ftpUser: a.GetValue(optUser) ?? "anonymous",
-			ftpPass: a.GetValue(optPassword) ?? "",
-			localDirectory: a.GetValue(optLocalDir)?.FullName,
-			fileName: a.GetValue(optFileName),
-			overwriteFile: a.GetValue(optOverwrite)
+				ftpUser: a.GetValue(optUser) ?? "anonymous",
+				ftpPass: a.GetValue(optPassword) ?? "",
+				localDirectory: a.GetValue(optLocalDir)?.FullName,
+				fileName: a.GetValue(optFileName),
+				overwriteFile: a.GetValue(optOverwrite)
 			);
 
 			Console.WriteLine($"\nArquivo importado com sucesso: {res}");
@@ -47,8 +61,6 @@ import.SetAction(async a =>
 		}
 	}	
 });
-
-
 
 root.Subcommands.Add(init);
 root.Subcommands.Add(import);

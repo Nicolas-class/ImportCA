@@ -2,7 +2,7 @@
   "profiles": {
     "ApplicationImportCA": {
       "commandName": "Project",
-      "commandLineArgs": "import -l C:\\Windows\\System32"
+      "commandLineArgs": "import -l c:\\users\\compras1\\downloads -f base_de_dados"
     }
   }
 }
