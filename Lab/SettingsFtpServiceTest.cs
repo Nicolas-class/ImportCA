@@ -1,4 +1,5 @@
 ﻿using ImportCA;
+using System.IO.Compression;
 
 namespace Lab
 {
@@ -36,7 +37,7 @@ namespace Lab
         [TestMethod]
         public void MiscTest()
         {
-            
-        }
+
+		}
     }
 }

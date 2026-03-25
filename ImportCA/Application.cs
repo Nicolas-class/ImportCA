@@ -4,6 +4,7 @@ using System.Data.SQLite;
 using FluentFTP;
 using System.Text.Json.Serialization;
 using FluentFTP.Exceptions;
+using System.Runtime.CompilerServices;
 
 namespace ImportCA
 {
@@ -27,9 +28,32 @@ namespace ImportCA
 		public const int FtpConnectTimeout = 10000;
 
 		//Diretório do arquivo FTP
-		private readonly static string SettingsFileName = Path.Combine(Directory.GetCurrentDirectory(), "app_settings.Json");
+		private readonly static string _settingsFileName = Path.Combine(Directory.GetCurrentDirectory(), "app_settings.Json");
+        private readonly static string _recoveredDir = Path.Combine(Directory.GetCurrentDirectory(), "recovered");
+        private readonly static string _downloadsDir = Path.Combine(Directory.GetCurrentDirectory(), "downloads");
 
-		public static bool IsInitialized() => File.Exists(ApplicationFtpService.SettingsFileName);
+		public static bool IsInitialized() => File.Exists(ApplicationFtpService._settingsFileName);
+
+        public static string RecoveredFolder
+        {
+            get
+            {
+                if (!Directory.Exists(ApplicationFtpService._recoveredDir))
+                    Directory.CreateDirectory(ApplicationFtpService._recoveredDir);
+
+                return ApplicationFtpService._recoveredDir;
+            }
+        }
+
+        public static string DownloadsFolder
+        {
+            get
+            {
+                if (!Directory.Exists(ApplicationFtpService._downloadsDir))
+                    Directory.CreateDirectory(ApplicationFtpService._downloadsDir);
+                return ApplicationFtpService._downloadsDir;
+            }
+		}
 
 		/// <summary>
 		/// Cria um arquivo de configuração da aplicação.
@@ -47,8 +71,10 @@ namespace ImportCA
             string downloadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "downloads");
             string recoveredFolder = Path.Combine(Directory.GetCurrentDirectory(), "recovered");
 
-			File.WriteAllText(ApplicationFtpService.SettingsFileName, jsonContent);
-            
+			File.WriteAllText(ApplicationFtpService._settingsFileName, jsonContent);
+
+            CreateDownloadsFolder();
+
 		}
 
 
@@ -56,16 +82,30 @@ namespace ImportCA
 		public static FtpSettingsJson GetJson()
 		{
 			//Verificando se já existe um arquivo de configuração
-			if (!File.Exists(ApplicationFtpService.SettingsFileName))
-			{
+			if (!File.Exists(ApplicationFtpService._settingsFileName))
 				throw new InvalidOperationException("O arquivo de configuração da aplicação não foi inicializado antes do uso.");
-			}
 
-			return JsonSerializer.Deserialize<FtpSettingsJson>(File.ReadAllText(ApplicationFtpService.SettingsFileName), new JsonSerializerOptions()
+			return JsonSerializer.Deserialize<FtpSettingsJson>(File.ReadAllText(ApplicationFtpService._settingsFileName), new JsonSerializerOptions()
 			{
 				PropertyNameCaseInsensitive = true
 			}) ?? throw new InvalidOperationException("Falha ao carregar as configurações.");
 
+		}
+
+        public static string? CreateDownloadsFolder()
+        {
+            try
+            {
+                string downloadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "downloads");
+                if (!Directory.Exists(downloadsFolder))
+                    Directory.CreateDirectory(downloadsFolder);
+                return downloadsFolder;
+
+            }
+            catch
+            {
+                throw new IOException("Falha ao criar a pasta de downloads.");
+            }
 		}
 	}
 

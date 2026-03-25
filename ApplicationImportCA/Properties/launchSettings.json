@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ApplicationImportCA": {
+      "commandName": "Project",
+      "commandLineArgs": "import -l C:\\Windows\\System32"
+    }
+  }
+}
