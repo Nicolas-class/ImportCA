@@ -1,7 +1,8 @@
 ﻿using System.CommandLine;
-using System.CommandLine.Parsing;
-using System.ComponentModel;
+using System.CommandLine.Invocation;
+using System.Runtime.CompilerServices;
 using ImportCA;
+using ImportCA.FtpApplication;
 
 RootCommand root = new RootCommand("Pipeline importação e gerenciamento da base de dados nacional.");
 
@@ -10,19 +11,18 @@ var init = new Command("init", "Inicializa a base de dados nacional.");
 #region "Import"
 var import = new Command("import", "Importa um arquivo para a base de dados nacional.");
 
-var optUser = new Option<string>("--user", "-u") { Description = "Username." };
 var optPassword = new Option<string>("--password", "-p") { Description = "Password."};
 var optLocalDir = new Option<DirectoryInfo>("--local-dir", "-l") { Description = "Remote directory."};
 var optFileName = new Option<string>("--file-name", "-f") { Description = "Local file name." };
 var optOverwrite = new Option<bool>("--overwrite", "-o") { Description = "overwrite file if already exists." };
 
-import.Options.Add(optUser);
 import.Options.Add(optPassword);
 import.Options.Add(optLocalDir);
 import.Options.Add(optFileName);
 import.Options.Add(optOverwrite);
 #endregion
 
+var openSettingsJson = new Command("open-json", "Abre o arquivo de configuração da aplicação.");
 
 
 init.SetAction((x) =>
@@ -35,9 +35,13 @@ import.SetAction(async a =>
 	Progress<ImportProgress> ImportPgr = new Progress<ImportProgress>(x =>
 	{
 		if (x.Step == ImportProgress.ImportStep.Download)
+		{
 			Console.Write($"\r{x.Message}");
+		}
 		else
+		{
 			Console.WriteLine(x.Message);
+		}
     });
 
 
@@ -46,7 +50,6 @@ import.SetAction(async a =>
 		try
 		{
 			string res = await ftp.ImportFile(
-				ftpUser: a.GetValue(optUser) ?? "anonymous",
 				ftpPass: a.GetValue(optPassword) ?? "",
 				localDirectory: a.GetValue(optLocalDir)?.FullName,
 				fileName: a.GetValue(optFileName),
@@ -62,8 +65,19 @@ import.SetAction(async a =>
 	}	
 });
 
+openSettingsJson.SetAction((x) =>
+{
+	if (!ApplicationFtpService.IsInitialized())
+	{
+		Console.WriteLine("O arquivo de configuração da aplicação não foi inicializado. Por favor, inicialize o arquivo de configuração antes de tentar abri-lo.");
+	}
+
+	ApplicationFtpService.OpenJson();
+});
+
 root.Subcommands.Add(init);
 root.Subcommands.Add(import);
+root.Subcommands.Add(openSettingsJson);
 
 return await root.Parse(args).InvokeAsync();
 

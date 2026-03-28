@@ -1,12 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "35PUVYYZdkU=",
+  "dgSpecHash": "fVq7do4QQGo=",
   "success": true,
-  "projectFilePath": "C:\\Users\\compras1\\Desktop\\ImportCA\\ImportCA\\ImportCA.csproj",
+  "projectFilePath": "F:\\Projetos\\ImportCA\\ImportCA\\ImportCA.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\compras1\\.nuget\\packages\\fluentftp\\53.0.2\\fluentftp.53.0.2.nupkg.sha512",
-    "C:\\Users\\compras1\\.nuget\\packages\\stub.system.data.sqlite.core.netstandard\\1.0.119\\stub.system.data.sqlite.core.netstandard.1.0.119.nupkg.sha512",
-    "C:\\Users\\compras1\\.nuget\\packages\\system.data.sqlite.core\\1.0.119\\system.data.sqlite.core.1.0.119.nupkg.sha512"
+    "C:\\Users\\nicol\\.nuget\\packages\\fluentftp\\53.0.2\\fluentftp.53.0.2.nupkg.sha512",
+    "C:\\Users\\nicol\\.nuget\\packages\\stub.system.data.sqlite.core.netstandard\\1.0.119\\stub.system.data.sqlite.core.netstandard.1.0.119.nupkg.sha512",
+    "C:\\Users\\nicol\\.nuget\\packages\\system.data.sqlite.core\\1.0.119\\system.data.sqlite.core.1.0.119.nupkg.sha512"
   ],
   "logs": []
 }

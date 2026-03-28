@@ -1,21 +1,21 @@
+using System.Diagnostics;
 using System.Text.Json;
-using System.IO;
-using System.Data.SQLite;
-using FluentFTP;
 using System.Text.Json.Serialization;
-using FluentFTP.Exceptions;
-using System.Runtime.CompilerServices;
 
-namespace ImportCA
+namespace ImportCA.FtpApplication
 {
-    public class ApplicationFtpService
+    public static class ApplicationFtpService
 	{
 
 		//Formatos de arquivos suportados.
-		public static readonly string[] SupportedExtensions = ".txt;.csv;.xlsx;.sqlite".Split(";");
-		
-		public enum ExtensionIndex : int { TXT, CSV, XLSX, SQLITE, DEFAULT = 0 };
+		public static readonly string[] SupportedExtensions = ".txt;.csv;.json;.sqlite".Split(";");
 
+        //Credencial padrão para login servidor ftp.
+		internal const string DefaultCredentials = "anonymous";
+
+		public enum ExtensionIndex : int { TXT, CSV, JSON, SQLITE, DEFAULT = 0 };
+
+		//Verifica se a extensão do arquivo é suportada pelo software.
 		public static bool IsSupportedExtension(string extension)
 		{
 			if (string.IsNullOrWhiteSpace(extension))
@@ -32,9 +32,16 @@ namespace ImportCA
         private readonly static string _recoveredDir = Path.Combine(Directory.GetCurrentDirectory(), "recovered");
         private readonly static string _downloadsDir = Path.Combine(Directory.GetCurrentDirectory(), "downloads");
 
+		/// <summary>
+		/// //Verifica se o arquivo de configuração foi inicializado.
+		/// </summary>
+		/// <returns>true se o arquivo existir, false caso contrário.</returns>
 		public static bool IsInitialized() => File.Exists(ApplicationFtpService._settingsFileName);
 
-        public static string RecoveredFolder
+		/// <summary>
+		/// //Pasta de recuperação de arquivos, caso haja falha no processo de manipulação no arquivo baixado do servidor.
+		/// </summary>
+		public static string RecoveredFolder
         {
             get
             {
@@ -45,7 +52,10 @@ namespace ImportCA
             }
         }
 
-        public static string DownloadsFolder
+		/// <summary>
+		/// //Pasta de downloads padrão, caso não seja especificada outra pasta para download do arquivo do servidor FTP.
+		/// </summary>
+		public static string DownloadsFolder
         {
             get
             {
@@ -74,7 +84,13 @@ namespace ImportCA
 		}
 
 
-		//Obtendo informações do arquivo de configuração.
+		/// <summary>
+		/// Obtém as informações do arquivo de configuração da aplicação e as desserializa para um objeto do tipo FtpSettingsJson.
+		/// </summary>
+		/// <returns><seealso cref="FtpSettingsJson"/></returns>
+		/// <exception cref="InvalidOperationException">
+        /// Caso arquivo de configuração não tenha sido inicializado.
+        /// </exception>
 		public static FtpSettingsJson GetJson()
 		{
 			//Verificando se já existe um arquivo de configuração
@@ -88,6 +104,21 @@ namespace ImportCA
                 throw new InvalidOperationException("Falha ao carregar as configurações.");
 
 		}
+
+		/// <summary>
+		/// Abre o arquivo json.
+		/// </summary>
+		/// <exception cref="InvalidOperationException">O arquivo não tenha sido inicializado usando o método <seealso cref="Init(bool)"/>.</exception>
+		public static void OpenJson()
+        {
+            //Lança exceção se o arquivo de configuração não foi inicializado.
+            if (!ApplicationFtpService.IsInitialized())
+            {
+                throw new InvalidOperationException("Settings file is not initialized. Please initialize the settings file before trying to open it.");
+            }
+
+            Process.Start(ApplicationFtpService._settingsFileName);
+        }
 	}
 
     public class FtpSettingsJson
@@ -96,34 +127,51 @@ namespace ImportCA
 
         private string _host = "ftp.mtps.gov.br";
 
+        private string _username = ApplicationFtpService.DefaultCredentials;
+
         private string _hostDirectory = "portal/fiscalizacao/seguranca-e-saude-no-trabalho/caepi/";
 
         private string _hostFileNameContains = "tgg_export_caepi";
 
         private string _expectedHostFileExtension = ".zip";
 
-        private bool _extractIfCompressed = false;
-
         private string _expectedInternalExtension = ".txt";
 
         private string _internalFileNameContains = "tgg_export_caepi";
 
-        private string _delimiter = "|";
-        #endregion
+        private char _txtDelimiter = '|';
 
-        #region "Propriedades"
+        private char _csvDelimiter = ',';
+		#endregion
 
-        /// <summary>
-        /// Nome do servidor FTP.
-        /// </summary>
-        [JsonPropertyName("host")]
-        public string HostFtpServer { get => this._host; set => this._host = value; }
+		#region "Propriedades"
 
-        /// <summary>
-        /// Diretório do arquivo do servidor.
-        /// </summary>
-        [JsonPropertyName("host_directory")]
-        public string HostDirectory { get => this._hostDirectory; set => this._hostDirectory = value; }
+		/// <summary>
+		/// Nome do servidor FTP.
+		/// </summary>
+		[JsonPropertyName("host")]
+        public string HostFtpServer 
+        { 
+            get => this._host; 
+            set => this._host = value; 
+        }
+
+		[JsonPropertyName("username")]
+		public string UserName
+		{
+			get => this._username;
+            set => this._username = (string.IsNullOrEmpty(value)) ? ApplicationFtpService.DefaultCredentials : value;
+		}
+
+		/// <summary>
+		/// Diretório do arquivo do servidor.
+		/// </summary>
+		[JsonPropertyName("host_directory")]
+        public string HostDirectory 
+        { 
+            get => this._hostDirectory; 
+            set => this._hostDirectory = value; 
+        }
 
         /// <summary>
         /// Nome do arquivo salvo dentro do servidor.
@@ -135,34 +183,53 @@ namespace ImportCA
         /// Extensão do arquivo FTP esperada pelo software.
         /// </summary>
         [JsonPropertyName("expected_host_file_extension")]
-        public string ExpectedHostFileExtension { get => this._expectedHostFileExtension; set => this._expectedHostFileExtension = value; }
-
-        /// <summary>
-        /// Extrair se o arquivo estiver compactado.
-        /// </summary>
-        [JsonPropertyName("extract_if_compressed")]
-        public bool ExtractIfCompressed { get => this._extractIfCompressed; set => this._extractIfCompressed = value; }
+        public string ExpectedHostFileExtension 
+        { 
+            get => this._expectedHostFileExtension; 
+            set => this._expectedHostFileExtension = value; 
+        }
 
         /// <summary>
         /// Extensão esperada dentro do arquivo compactado.
         /// </summary>
         /// <exception cref="ArgumentException"></exception>
-        [JsonPropertyName("expected_internal_extension")]
+        [JsonPropertyName("expected_internal_file_extension")]
         public string ExpectedInternalExtension
         {
             get => this._expectedInternalExtension;
             set => this._expectedInternalExtension = (!ApplicationFtpService.IsSupportedExtension(value)) ? 
 					throw new ArgumentException($"Extensão: \"{value}\" não é suportada pelo software.") :
 					value;
-
         }
 
-        [JsonPropertyName("internal_file_name")]
-        public string InternalFileName { get => this._internalFileNameContains; set => this._internalFileNameContains = value; }
+        /// <summary>
+        /// Nome do arquivo esperado dentro do arquivo compactado.
+        /// </summary>
+        [JsonPropertyName("internal_file_name_contains")]
+        public string InternalFileNameContains { get => this._internalFileNameContains; set => this._internalFileNameContains = value; }
 
-        [JsonPropertyName("delimiter_convert")]
-        public string DelimiterConvert { get => this._delimiter; set => this._delimiter = value; }
+        /// <summary>
+        /// Delimitador padrão para conversão de arquivo.
+        /// </summary>
+        [JsonPropertyName("txt_delimiter_convert")]
+        public char TxtDelimiter
+        {
+            get => this._txtDelimiter;
+            set => this._txtDelimiter = (char.IsWhiteSpace(value)) ? 
+                    throw new ArgumentException("O delimitador para conversão de arquivos CSV não pode ser um caractere de espaço em branco.") :
+				    value;
+		}
 
-        #endregion
-    }
+
+        [JsonPropertyName("csv_delimiter_convert")]
+        public char CsvDelimiter
+        {
+            get => this._csvDelimiter;
+            set => this._csvDelimiter = (char.IsWhiteSpace(value)) ? 
+                    throw new ArgumentException("O delimitador para conversão de arquivos de texto não pode ser um caractere de espaço em branco.") :
+                     this._csvDelimiter = value;
+
+		}
+		#endregion
+	}
 }

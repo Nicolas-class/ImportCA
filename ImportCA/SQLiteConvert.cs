@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Data.SQLite;
+using ImportCA.FtpApplication;
 
 namespace ImportCA
 {
@@ -11,9 +12,9 @@ namespace ImportCA
     {
         private const string CmdCreateTable = "";
 
-        public static string ConvertFile(string sourceFileName, char? delimiter = null, string? destFileName = null, bool overwrite = false, bool deleteFile = false)
+        public static string ConvertFile(FtpSettingsJson settings, string sourceFileName, string? destFileName = null, bool overwrite = false, bool deleteSourceFile = false)
         {
-            if (!File.Exists(sourceFileName))
+			if (!File.Exists(sourceFileName))
                 throw new ArgumentException("Arquivo informado não existe.");
 
             return string.Empty;

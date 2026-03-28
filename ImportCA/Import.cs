@@ -1,82 +1,12 @@
 ﻿using FluentFTP;
 using FluentFTP.Exceptions;
 using System.IO.Compression;
+using ImportCA.FtpApplication;
+using ImportCA.FtpManagement;
+using FluentFTP.Helpers;
 
 namespace ImportCA
 {
-	internal static class ManagementFileFtpService
-	{
-        public enum CheckInvalidChars { path, filename };
-
-        //Verifica se o diretório ou caminho do arquivo informado, contém caractéres inválidos.
-        public static bool HasInvalidChars(string fileOrDirectory, ManagementFileFtpService.CheckInvalidChars check = CheckInvalidChars.path) => check switch
-        {
-            CheckInvalidChars.path => (string.IsNullOrEmpty(fileOrDirectory) || fileOrDirectory.IndexOfAny(Path.GetInvalidPathChars()) >= 0),
-            CheckInvalidChars.filename => (string.IsNullOrEmpty(fileOrDirectory) || fileOrDirectory.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-        };
-
-        //Verifica se o arquivo informado está compactado.
-        public static bool IsCompressedFile(string path)
-        {
-            try
-            {
-                using (var file = ZipFile.OpenRead(path))
-                {
-                    var entries = file.Entries;
-                    return true;
-                }
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        //Função que faz a montagem do caminho completo do arquivo à ser movido.
-        public static string SolvePath(FtpSettingsJson appFtp, string? directory = null, string? fileName = null, bool overwrite = false)
-        {
-            directory ??= ApplicationFtpService.DownloadsFolder;
-            fileName ??= $"{appFtp.InternalFileName}{appFtp.ExpectedInternalExtension}";
-		
-            //Exceção se o diretório informado conter caractéres inválidos.
-            if (ManagementFileFtpService.HasInvalidChars(directory, ManagementFileFtpService.CheckInvalidChars.path))
-                throw new ArgumentException("O diretório informado contém caractéres inválidos.");
-
-            //Exceção se o nome do arquivo informado conter caractéres inválidos.
-            if (ManagementFileFtpService.HasInvalidChars(fileName, ManagementFileFtpService.CheckInvalidChars.filename))
-                throw new ArgumentException("O nome do arquivo informado contém caractéres inválidos.");
-
-            //Exceção se o caminho informado corresponde a um arquivo existente.
-            if (File.Exists(directory))
-                throw new ArgumentException("O caminho informado corresponde a um arquivo existente. Informe um diretório válido.");
-
-            fileName = (!Path.HasExtension(fileName) || Path.GetExtension(fileName) != appFtp.ExpectedInternalExtension) ?
-            Path.ChangeExtension(fileName, appFtp.ExpectedInternalExtension) :
-            fileName;
-
-            return Path.Combine(directory, fileName);
-        }
-
-		public static string MoveEx(string sourceFileName, string destFileName, bool overwrite = false)
-		{
-            int count = 0;
-
-            while (!overwrite && File.Exists(destFileName))
-            {
-                count++;
-                string newFileName = $"{Path.GetFileNameWithoutExtension(destFileName)} ({count}){Path.GetExtension(sourceFileName)}";
-                string newDestFileName = Path.Combine(new FileInfo(destFileName).Directory.FullName, newFileName);
-                destFileName = (!File.Exists(newDestFileName)) ? newDestFileName : destFileName;
-            }
-
-			File.Move(sourceFileName, destFileName, overwrite);
-
-			return destFileName;
-
-        }
-
-    }
-
 	public class ImportProgress
 	{
 		public enum ImportStep { Locating, Download, Extract, MovingFile, Validating, Warning, Starting, Information }
@@ -91,7 +21,6 @@ namespace ImportCA
 
     public class ImportFtpService : IDisposable
 	{
-		private const string DefaultCredentials = "anonymous";
 		private bool _disposed = false;
 
 		private string _tmpFolderPath = string.Empty;
@@ -104,11 +33,12 @@ namespace ImportCA
 			this._progress = progress;
         }
             
-
         public void Dispose()
 		{
 			if (this._disposed)
+			{
 				return;
+			}
 
 			DeleteTempFolder();
 
@@ -150,14 +80,18 @@ namespace ImportCA
 		private static void CheckCredentials(string ftpUser, string ftpPass)
 		{
 			if (string.IsNullOrEmpty(ftpUser))
+			{
 				throw new ArgumentNullException("Nome de usuário é obrigatório.");
+			}
 
-			if (ftpUser != ImportFtpService.DefaultCredentials && string.IsNullOrEmpty(ftpPass))
-				throw new ArgumentNullException("A senha é obrigatória para usuários não-anônimos.");
+			if (ftpUser != ApplicationFtpService.DefaultCredentials && string.IsNullOrEmpty(ftpPass))
+			{
+				throw new ArgumentNullException("A senha é obrigatória para conexão de usuários não-anônimos.");
+			}
 		}
 
 		//Conecta-se ao servidor FTP e baixa o arquivo.
-		private static async Task<bool> AsyncCheckFtpConnection(FtpSettingsJson appSettings, string ftpUser = ImportFtpService.DefaultCredentials, string ftpPass = ImportFtpService.DefaultCredentials)
+		private static async Task<bool> AyncTestConnection(FtpSettingsJson appSettings, string ftpUser = ApplicationFtpService.DefaultCredentials, string ftpPass = ApplicationFtpService.DefaultCredentials)
 		{
 			CheckCredentials(ftpUser, ftpPass);
 
@@ -171,8 +105,17 @@ namespace ImportCA
 					return ftpClient.IsConnected;
 				}
 
+				
 			}
-			catch
+			catch(TimeoutException timeoutEx)
+			{
+				return false;
+			}
+			catch(FtpAuthenticationException faEx)
+			{
+				return false;
+			}
+			catch(Exception ex)
 			{
 				return false;
 			}
@@ -189,13 +132,15 @@ namespace ImportCA
             });
 
             if (this._settingsJson is null)
+			{
 				return string.Empty;
+			}
 
 			using (var packed = ZipFile.OpenRead(pathFile))
 			{
 				var entry = packed.Entries.FirstOrDefault(x =>
 
-					x.Name.Contains(this._settingsJson.InternalFileName, StringComparison.OrdinalIgnoreCase)
+					x.Name.Contains(this._settingsJson.InternalFileNameContains, StringComparison.OrdinalIgnoreCase)
 
 				) ?? throw new FileNotFoundException("O arquivo compactado não foi encontrado.");
 
@@ -221,48 +166,28 @@ namespace ImportCA
 		/// <exception cref="FileNotFoundException"></exception>
 		/// <exception cref="FtpException"></exception>
 		/// <exception cref="NotSupportedException"></exception>"
-		public async Task<string> ImportFile(string ftpUser = ImportFtpService.DefaultCredentials, string ftpPass = ImportFtpService.DefaultCredentials, string? localDirectory = null, string? fileName = null, bool overwriteFile = false)
+		public async Task<string> ImportFile(string ftpPass = ApplicationFtpService.DefaultCredentials, string? localDirectory = null, string? fileName = null, bool overwriteFile = false)
 		{
-			this._progress?.Report(new ImportProgress()
-			{
-				Message = "\nRecuperando informações do arquivo de configuração...",
-				Step = ImportProgress.ImportStep.Starting
-			});
 
             if (this._settingsJson is null)
-				throw new InvalidOperationException("Settings object is not set. Please set the FtpSettings property before calling this method.");
+			{
+				throw new InvalidOperationException("O arquivo de configurações não foi inicializado. Use o comando \"Init\" antes executar essa função.");
+			}
 
-            this._progress?.Report(new ImportProgress()
-            {
-                Message = "\nValidando credenciais...",
-                Step = ImportProgress.ImportStep.Validating
-            });
-
-            CheckCredentials(ftpUser, ftpPass);
-
-            this._progress?.Report(new ImportProgress()
-            {
-                Message = "\nValidação concluída com sucesso...",
-                Step = ImportProgress.ImportStep.Validating
-            });
+			CheckCredentials(this._settingsJson.UserName, ftpPass);
 
             //Obtendo o caminho completo do arquivo a ser movido.
-            string fullPath = ManagementFileFtpService.SolvePath(this._settingsJson, localDirectory, fileName);
+            string fullPath = ManagementFileFtpService.SolvePath(fileName ?? this._settingsJson.InternalFileNameContains, this._settingsJson.ExpectedInternalExtension, localDirectory ?? ApplicationFtpService.DownloadsFolder, fileName);
 
-            this._progress?.Report(new ImportProgress()
-            {
-                Message = "\nValidando conexão com servidor FTP...",
-                Step = ImportProgress.ImportStep.Validating
-            });
-
-            if (!await ImportFtpService.AsyncCheckFtpConnection(this._settingsJson, ftpUser, ftpPass))
+            if (!await ImportFtpService.AyncTestConnection(this._settingsJson, this._settingsJson.UserName, ftpPass))
+			{
 				throw new FtpException($"Não foi possível conectar-se ao servidor \"{this._settingsJson.HostFtpServer}\" informado no arquivo de configuração.");
-
+			}
 
             string tmpDownloadedPath = string.Empty;
 			string unpackedFilePath = string.Empty;
 
-			using (var ftp = new AsyncFtpClient(this._settingsJson.HostFtpServer, ftpUser, ftpPass))
+			using (var ftp = new AsyncFtpClient(this._settingsJson.HostFtpServer, this._settingsJson.UserName, ftpPass))
 			{
                 this._progress?.Report(new ImportProgress()
                 {
@@ -273,9 +198,6 @@ namespace ImportCA
                 ftp.Config.ConnectTimeout = ApplicationFtpService.FtpConnectTimeout;
 				var profile = await ftp.AutoConnect();
 
-				if (profile is null)
-					throw new FtpException("Não foi possível conectar-se ao servidor FTP.");
-
                 this._progress?.Report(new ImportProgress()
                 {
                     Message = "\nConexão estabelecida com sucesso...",
@@ -284,7 +206,9 @@ namespace ImportCA
 
                 //Lança exceção se não existir nenhum diretório dentro do servidor informado pelo arquivo de configuração.
                 if (!await ftp.DirectoryExists(this._settingsJson.HostDirectory))
+				{
 					throw new DirectoryNotFoundException($"O diretório informado não existe dentro do servidor \"{this._settingsJson.HostFtpServer}\"");
+				}
 
                 this._progress?.Report(new ImportProgress()
                 {
@@ -292,12 +216,14 @@ namespace ImportCA
                     Step = ImportProgress.ImportStep.Information
                 });
 
-                //Obtendo a listagem do nome de todos os arquivos dentro do diretório
-                var items = await ftp.GetListing(this._settingsJson.HostDirectory);
+				//Obtendo a listagem do nome de todos os arquivos dentro do diretório
+				var items = await ftp.GetListing(this._settingsJson.HostDirectory, options: FtpListOption.Recursive);
 
 				//Lança exceção se não existir nenhum arquivo dentro do diretório informado pelo arquivo de configuração.
 				if (items.Length <= 0)
-					throw new FileNotFoundException($"Não existe nenhum arquivo no diretório \"{this._settingsJson.HostDirectory}\".");
+				{
+					throw new DirectoryNotFoundException($"O diretório informado não existe dentro do servidor \"{this._settingsJson.HostFtpServer}\"");
+				}
 
 				//Localizando o primeiro arquivo com o nome informado no arquivo de configuração, ignorando letras maiúsculas ou minúsculas.
 				var file = items.FirstOrDefault((x) =>
@@ -310,11 +236,13 @@ namespace ImportCA
 												throw new NotSupportedException("O arquivo informado não contém nenhuma extensão definida.");
 
 				if (remotefileExtension != this._settingsJson.ExpectedHostFileExtension)
+				{
 					throw new NotSupportedException($"O arquivo localizado \"{file.Name}\" não é do tipo esperado informado no arquivo de configuração.");
+				}
 
                 this._progress?.Report(new ImportProgress()
                 {
-                    Message = "\nArquivo localizado com sucesso.",
+                    Message = "\nArquivo foi localizado com sucesso.",
                     Step = ImportProgress.ImportStep.Information
                 });
 
@@ -323,7 +251,7 @@ namespace ImportCA
 				//Caminhho para o arquivo baixo temporariamente
 				tmpDownloadedPath = Path.Combine(this._tmpFolderPath, Path.ChangeExtension(Path.GetRandomFileName(),this._settingsJson.ExpectedHostFileExtension));
 
-				var pgrDownload = new Progress<FtpProgress>(ftp =>
+				Progress<FtpProgress> pgrDownload = new Progress<FtpProgress>(ftp =>
 				{
 					this._progress?.Report(new ImportProgress()
 					{
@@ -337,8 +265,9 @@ namespace ImportCA
                 FtpStatus downloadResult = await ftp.DownloadFile(tmpDownloadedPath, file.FullName, verifyOptions: FtpVerify.OnlyVerify, progress:pgrDownload);
 
                 if (downloadResult != FtpStatus.Success)
+				{
 					throw new FtpException("Ocorreu um erro durante o download do arquivo. Por favor, tente novamente mais tarde.");
-
+				}
 
                 this._progress?.Report(new ImportProgress()
                 {
@@ -347,24 +276,24 @@ namespace ImportCA
                 });
             }
 
-			unpackedFilePath = (ManagementFileFtpService.IsCompressedFile(tmpDownloadedPath) && this._settingsJson.ExtractIfCompressed) ? this.ExtractFile(tmpDownloadedPath) : tmpDownloadedPath;
-
+			unpackedFilePath = (ManagementFileFtpService.IsCompressedFile(tmpDownloadedPath)) ? this.ExtractFile(tmpDownloadedPath) : tmpDownloadedPath;
 
 			if (!ApplicationFtpService.IsSupportedExtension(Path.GetExtension(unpackedFilePath)))
 			{
-                Directory.Move(this._tmpFolderPath, Path.Combine(ApplicationFtpService.RecoveredFolder, new DirectoryInfo(this._tmpFolderPath).Name));
+                ManagementFileFtpService.MoveEx(this._tmpFolderPath, ApplicationFtpService.RecoveredFolder);
 				this.DeleteTempFolder();
 				throw new NotSupportedException("Arquivo não suportado. O conteúdo foi movido para a pasta de recuperação para processamento manual.");
 			}
 
 			string pathResult = string.Empty;
+
 			try
 			{
 				pathResult = ManagementFileFtpService.MoveEx(unpackedFilePath, fullPath, overwriteFile);
 			}
 			catch (Exception ex)
 			{
-				fullPath = ManagementFileFtpService.SolvePath(this._settingsJson, ApplicationFtpService.DownloadsFolder, fileName, overwriteFile);
+				fullPath = ManagementFileFtpService.SolvePath(this._settingsJson.InternalFileNameContains, this._settingsJson.ExpectedInternalExtension, localDirectory ?? ApplicationFtpService.DownloadsFolder, fileName);
                 pathResult = ManagementFileFtpService.MoveEx(unpackedFilePath, fullPath);
 
                 this._progress?.Report(new ImportProgress()
@@ -372,7 +301,6 @@ namespace ImportCA
                     Message = $"\nArquivo movido para a pasta padrão de downloads, pois o diretório informado exige um nível permissões elevadas.\n\nDetalhes: {ex.Message}",
                     Step = ImportProgress.ImportStep.Information
                 });
-
             }
 
 			return pathResult;
