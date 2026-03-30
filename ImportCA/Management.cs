@@ -1,41 +1,60 @@
-﻿using ImportCA.FtpApplication;
-using System.IO.Compression;
+﻿using System.IO.Compression;
 
-namespace ImportCA.FtpManagement
+namespace ImportCA.FtpFileManagement
 {
-	public static class ManagementFileFtpService
+	public class ManagementFileFtpService: IDisposable
 	{
-		//Enumera todas as linhas de um arquivo.
-		public static async Task EnumLinesAsync(string path, Action<string> action)
+
+		private string _tmpFolderPath = string.Empty;
+
+		private bool _disposed = false;
+
+		public bool Disposed => this._disposed;
+
+		public string TempFolderPath => _tmpFolderPath;
+
+		public void Dispose()
 		{
-			if (!File.Exists(path))
+			if (this._disposed)
 			{
-				throw new FileNotFoundException("O arquivo especificado não existe.");
+				return;
 			}
 
-			if (!ApplicationFtpService.IsSupportedExtension(path))
-			{
-				throw new NotSupportedException("O arquivo especificado não é de um formato suportado para realizar a conversão.");
-			}
+			DeleteTempFolder();
 
-			await Task.Run(() =>
-			{
-				using (var reader = new StreamReader(path))
-				{
-					while (!reader.EndOfStream)
-					{
-						string? line = reader.ReadLine();
-
-						if(line is not null)
-						{
-							action(line);
-						}
-						
-					}
-				}
-			});
+			this._disposed = true;
 		}
 
+		//Cria uma pasta temporária para realizar as devidas operações.
+		public void CreateTempFolder()
+		{
+			//Apagando o diretório temporário anterior caso existir.
+			DeleteTempFolder();
+
+			var dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+
+			this._tmpFolderPath = dir.FullName;
+		}
+
+		//Apaga a pasta temporária.
+		public void DeleteTempFolder()
+		{
+			//Se a pasta anterior ainda existir, será apagada.
+			if (!Directory.Exists(this._tmpFolderPath))
+			{
+				this._tmpFolderPath = string.Empty;
+				return;
+			}
+
+			try
+			{
+				Directory.Delete(this._tmpFolderPath, true);
+			}
+			finally
+			{
+				this._tmpFolderPath = string.Empty;
+			}
+		}
 		public enum CheckInvalidChars { path, filename };
 
 		//Verifica se o diretório ou caminho do arquivo informado, contém caractéres inválidos.

@@ -2,8 +2,7 @@
 using FluentFTP.Exceptions;
 using System.IO.Compression;
 using ImportCA.FtpApplication;
-using ImportCA.FtpManagement;
-using FluentFTP.Helpers;
+using ImportCA.FtpFileManagement;
 
 namespace ImportCA
 {
@@ -21,61 +20,29 @@ namespace ImportCA
 
     public class ImportFtpService : IDisposable
 	{
-		private bool _disposed = false;
 
-		private string _tmpFolderPath = string.Empty;
 		private FtpSettingsJson? _settingsJson = null;
 		private IProgress<ImportProgress>? _progress = null;
+		private bool _disposed = false;
+
+		public bool Disposed => this._disposed;
 
 		public ImportFtpService(FtpSettingsJson settingsJson, IProgress<ImportProgress>? progress)
 		{
             this._settingsJson = settingsJson ?? throw new ArgumentNullException(nameof(settingsJson));
 			this._progress = progress;
         }
-            
-        public void Dispose()
+
+		public void Dispose()
 		{
 			if (this._disposed)
 			{
 				return;
 			}
 
-			DeleteTempFolder();
 
-			this._disposed = true;
 		}
 
-		//Cria uma pasta temporária para realizar as devidas operações.
-		private void CreateTempFolder()
-		{
-			//Apagando o diretório temporário anterior caso existir.
-			DeleteTempFolder();
-
-			var dir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
-
-			this._tmpFolderPath = dir.FullName;
-		}
-
-		//Apaga a pasta temporária.
-		private void DeleteTempFolder()
-		{
-			//Se a pasta anterior ainda existir, será apagada.
-			if (!Directory.Exists(this._tmpFolderPath))
-			{
-				this._tmpFolderPath = string.Empty;
-				return;
-			}
-
-			try
-			{
-				Directory.Delete(this._tmpFolderPath,true);
-			}
-			finally
-			{
-				this._tmpFolderPath = string.Empty;
-			}
-		}
-		
 		//Lança uma exceção se as credenciais para conexão ftp não forem preenchidas corretamente.
 		private static void CheckCredentials(string ftpUser, string ftpPass)
 		{
@@ -104,8 +71,6 @@ namespace ImportCA
 
 					return ftpClient.IsConnected;
 				}
-
-				
 			}
 			catch(TimeoutException timeoutEx)
 			{
@@ -246,10 +211,11 @@ namespace ImportCA
                     Step = ImportProgress.ImportStep.Information
                 });
 
-                this.CreateTempFolder();
+				using var manageFileFtp = new ManagementFileFtpService();
+				manageFileFtp.CreateTempFolder();
 
 				//Caminhho para o arquivo baixo temporariamente
-				tmpDownloadedPath = Path.Combine(this._tmpFolderPath, Path.ChangeExtension(Path.GetRandomFileName(),this._settingsJson.ExpectedHostFileExtension));
+				tmpDownloadedPath = Path.Combine(manageFileFtp.TempFolderPath, Path.ChangeExtension(Path.GetRandomFileName(),this._settingsJson.ExpectedHostFileExtension));
 
 				Progress<FtpProgress> pgrDownload = new Progress<FtpProgress>(ftp =>
 				{
@@ -259,8 +225,6 @@ namespace ImportCA
 						Step = ImportProgress.ImportStep.Download
 					});
 				});
-
-				this.CreateTempFolder();
 
                 FtpStatus downloadResult = await ftp.DownloadFile(tmpDownloadedPath, file.FullName, verifyOptions: FtpVerify.OnlyVerify, progress:pgrDownload);
 
@@ -280,8 +244,8 @@ namespace ImportCA
 
 			if (!ApplicationFtpService.IsSupportedExtension(Path.GetExtension(unpackedFilePath)))
 			{
-                ManagementFileFtpService.MoveEx(this._tmpFolderPath, ApplicationFtpService.RecoveredFolder);
-				this.DeleteTempFolder();
+                ManagementFileFtpService.MoveEx(manageFileFtp.TempFolderPath, ApplicationFtpService.RecoveredFolder);
+				manageFileFtp.DeleteTempFolder();
 				throw new NotSupportedException("Arquivo não suportado. O conteúdo foi movido para a pasta de recuperação para processamento manual.");
 			}
 
@@ -293,7 +257,7 @@ namespace ImportCA
 			}
 			catch (Exception ex)
 			{
-				fullPath = ManagementFileFtpService.SolvePath(this._settingsJson.InternalFileNameContains, this._settingsJson.ExpectedInternalExtension, localDirectory ?? ApplicationFtpService.DownloadsFolder, fileName);
+				fullPath = ManagementFileFtpService.SolvePath(this._settingsJson.InternalFileNameContains, this._settingsJson.ExpectedInternalExtension, , fileName);
                 pathResult = ManagementFileFtpService.MoveEx(unpackedFilePath, fullPath);
 
                 this._progress?.Report(new ImportProgress()

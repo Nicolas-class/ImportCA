@@ -5,19 +5,29 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Data.SQLite;
 using ImportCA.FtpApplication;
+using ImportCA.FtpFileManagement;
 
-namespace ImportCA
+namespace ImportCA.FtpConvert
 {
-    public static class SQLite
+    public static class ConvertFtpService
     {
         private const string CmdCreateTable = "";
 
-        public static string ConvertFile(FtpSettingsJson settings, string sourceFileName, string? destFileName = null, bool overwrite = false, bool deleteSourceFile = false)
-        {
-			if (!File.Exists(sourceFileName))
-                throw new ArgumentException("Arquivo informado não existe.");
+        public enum FileToConvert { SQLite, CSV, Text, Json }
 
-            return string.Empty;
+        public static string ConvertFile(FtpSettingsJson settings, string sourceFileName, string? destDirectory = null, string? destFileName = null, FileToConvert filetype = FileToConvert.SQLite, bool overwrite = false, bool deleteSourceFile = false)
+        {
+            //Verificando se o arquivo existe.
+            if (!File.Exists(sourceFileName))
+            {
+				throw new FileNotFoundException($"O arquivo informado \"{sourceFileName}\" não foi localizado.");
+			}
+
+			//Criando o caminho do arquivo de destino.
+			string fullPath = ManagementFileFtpService.SolvePath(Path.GetFileNameWithoutExtension(sourceFileName), ".sqlite",
+                                                                    destDirectory ?? ApplicationFtpService.GetApplicationDirectory(ApplicationFtpService.DirectoryName.Converted),
+                                                                    destFileName);
+
         }
     }
 }

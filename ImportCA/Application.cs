@@ -1,3 +1,4 @@
+using ImportCA.FtpFileManagement;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -6,31 +7,28 @@ namespace ImportCA.FtpApplication
 {
     public static class ApplicationFtpService
 	{
-
 		//Formatos de arquivos suportados.
 		public static readonly string[] SupportedExtensions = ".txt;.csv;.json;.sqlite".Split(";");
 
-        //Credencial padrão para login servidor ftp.
-		internal const string DefaultCredentials = "anonymous";
-
 		public enum ExtensionIndex : int { TXT, CSV, JSON, SQLITE, DEFAULT = 0 };
 
-		//Verifica se a extensão do arquivo é suportada pelo software.
-		public static bool IsSupportedExtension(string extension)
-		{
-			if (string.IsNullOrWhiteSpace(extension))
-				return false;
+        public enum DirectoryName { Recovered, Downloads, Converted }
 
-			return ApplicationFtpService.SupportedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
-		}
+		//Verifica se a extensão do arquivo é suportada pelo software.
+		public static bool IsSupportedExtension(string extension) =>
+            !string.IsNullOrWhiteSpace(extension) && ApplicationFtpService.SupportedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
 
 		//Tempo máximo para download de arquivos em servidores FTP.
 		public const int FtpConnectTimeout = 10000;
+
+		//Credencial padrão para login servidor ftp.
+		internal const string DefaultCredentials = "anonymous";
 
 		//Diretório do arquivo FTP
 		private readonly static string _settingsFileName = Path.Combine(Directory.GetCurrentDirectory(), "app_settings.json");
         private readonly static string _recoveredDir = Path.Combine(Directory.GetCurrentDirectory(), "recovered");
         private readonly static string _downloadsDir = Path.Combine(Directory.GetCurrentDirectory(), "downloads");
+        private readonly static string _convertedDir = Path.Combine(Directory.GetCurrentDirectory(), "converted");
 
 		/// <summary>
 		/// //Verifica se o arquivo de configuração foi inicializado.
@@ -46,7 +44,9 @@ namespace ImportCA.FtpApplication
             get
             {
                 if (!Directory.Exists(ApplicationFtpService._recoveredDir))
-                    Directory.CreateDirectory(ApplicationFtpService._recoveredDir);
+                {
+					Directory.CreateDirectory(ApplicationFtpService._recoveredDir);
+				}
 
                 return ApplicationFtpService._recoveredDir;
             }
@@ -60,10 +60,49 @@ namespace ImportCA.FtpApplication
             get
             {
                 if (!Directory.Exists(ApplicationFtpService._downloadsDir))
-                    Directory.CreateDirectory(ApplicationFtpService._downloadsDir);
+                {
+					Directory.CreateDirectory(ApplicationFtpService._downloadsDir);
+				}
+
                 return ApplicationFtpService._downloadsDir;
             }
 		}
+
+        //Verifica se o caminho informado é um diretório
+        private static bool IsDirectory(string directory)
+        {
+            var dir = File.GetAttributes(directory);
+
+            return (dir & FileAttributes.Directory) == FileAttributes.Directory;
+        }
+
+        //Cria um diretório automaticamente caso não existir.
+        private static string AutoCreateDirectory(string directory)
+        {
+            if (ManagementFileFtpService.HasInvalidChars(directory, ManagementFileFtpService.CheckInvalidChars.path))
+            {
+                throw new ArgumentException("Caminho informado contém carácteres inválidos.");
+            }
+
+            if (!IsDirectory(directory))
+            {
+                throw new ArgumentException("Caminho informado não é um diretório.");
+            }
+            
+            if (!Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            return directory;
+        }
+
+        public static string GetApplicationDirectory(ApplicationFtpService.DirectoryName folderGet) => folderGet switch
+        {
+            DirectoryName.Recovered => AutoCreateDirectory(ApplicationFtpService._recoveredDir),
+			DirectoryName.Converted => AutoCreateDirectory(ApplicationFtpService._convertedDir),
+			DirectoryName.Downloads => AutoCreateDirectory(ApplicationFtpService._downloadsDir),
+		};
 
 		/// <summary>
 		/// Cria um arquivo de configuração da aplicação.

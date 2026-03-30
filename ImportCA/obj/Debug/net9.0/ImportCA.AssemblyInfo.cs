@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ImportCA")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b70a6e93a6fc5b1fea0e3259b2269176cdcb0337")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+59ea50ba4239443152dc0e500b0d5509250961e9")]
 [assembly: System.Reflection.AssemblyProductAttribute("ImportCA")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ImportCA")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
