@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "fVq7do4QQGo=",
+  "dgSpecHash": "ECAl8HNlq64=",
   "success": true,
-  "projectFilePath": "F:\\Projetos\\ImportCA\\ImportCA\\ImportCA.csproj",
+  "projectFilePath": "E:\\Projetos\\ImportCA\\ImportCA\\ImportCA.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\nicol\\.nuget\\packages\\fluentftp\\53.0.2\\fluentftp.53.0.2.nupkg.sha512",
     "C:\\Users\\nicol\\.nuget\\packages\\stub.system.data.sqlite.core.netstandard\\1.0.119\\stub.system.data.sqlite.core.netstandard.1.0.119.nupkg.sha512",

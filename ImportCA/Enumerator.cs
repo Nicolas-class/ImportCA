@@ -3,7 +3,6 @@
 namespace ImportCA.FtpFileManagement
 {
 
-	
 	public class FileEnumerator
 	{
 		public enum EnumFileType { Text, Json, SQLite, CSV }

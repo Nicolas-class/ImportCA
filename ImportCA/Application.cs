@@ -68,14 +68,6 @@ namespace ImportCA.FtpApplication
             }
 		}
 
-        //Verifica se o caminho informado é um diretório
-        private static bool IsDirectory(string directory)
-        {
-            var dir = File.GetAttributes(directory);
-
-            return (dir & FileAttributes.Directory) == FileAttributes.Directory;
-        }
-
         //Cria um diretório automaticamente caso não existir.
         private static string AutoCreateDirectory(string directory)
         {
@@ -84,7 +76,7 @@ namespace ImportCA.FtpApplication
                 throw new ArgumentException("Caminho informado contém carácteres inválidos.");
             }
 
-            if (!IsDirectory(directory))
+            if (!Directory.Exists(directory) && File.Exists(directory))
             {
                 throw new ArgumentException("Caminho informado não é um diretório.");
             }

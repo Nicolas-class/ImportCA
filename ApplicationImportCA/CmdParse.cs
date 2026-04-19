@@ -34,13 +34,23 @@ import.SetAction(async a =>
 {
 	Progress<ImportProgress> ImportPgr = new Progress<ImportProgress>(x =>
 	{
+		
+		char statusChar = x.Step switch
+		{
+			ImportProgress.ImportStep.Download => 'D',
+			ImportProgress.ImportStep.Unpacking => 'U',
+			ImportProgress.ImportStep.Validating => 'V',
+			ImportProgress.ImportStep.Information => 'I',
+			ImportProgress.ImportStep.Warning => '!'
+		};
+
 		if (x.Step == ImportProgress.ImportStep.Download)
 		{
-			Console.Write($"\r{x.Message}");
+			Console.Write($"\r ({statusChar}) {x.Message}");
 		}
 		else
 		{
-			Console.WriteLine(x.Message);
+			Console.WriteLine($"({statusChar}) {x.Message}\n");
 		}
     });
 
@@ -56,11 +66,11 @@ import.SetAction(async a =>
 				overwriteFile: a.GetValue(optOverwrite)
 			);
 
-			Console.WriteLine($"\nArquivo importado com sucesso: {res}");
+			Console.WriteLine($"Arquivo importado com sucesso: {res}");
 		}
 		catch(Exception ex)
 		{
-			Console.WriteLine($"\nErro ao importar arquivo: {ex.Message}");
+			Console.WriteLine($"Erro ao importar arquivo: {ex.Message}");
 		}
 	}	
 });

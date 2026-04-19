@@ -6,17 +6,20 @@ using ImportCA.FtpApplication;
 using ImportCA.FtpFileManagement;
 using System.Diagnostics;
 using System.Data.SQLite;
+using ImportCA.FtpConvert;
 
 namespace Lab
 {
 	[TestClass]
-	public sealed class ManagementFile
+	public class ManagementFile
 	{
 	
 		[TestMethod]
-		public async Task ConvertToDataBase()
+		public void ConvertToDataBase()
 		{
-			
+			ApplicationFtpService.Init();
+			var ftpsettings = ApplicationFtpService.GetJson();
+			ConvertFtpService.ConvertFile(ftpsettings, @"E:\Projetos\ImportCA\ApplicationImportCA\bin\Debug\net9.0\downloads\banco_de_dados.txt");
 		}
 
 	}

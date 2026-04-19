@@ -8,7 +8,15 @@ namespace ImportCA
 {
 	public class ImportProgress
 	{
-		public enum ImportStep { Locating, Download, Extract, MovingFile, Validating, Warning, Starting, Information }
+		public enum ImportStep 
+	{ 
+			Download, 
+			Unpacking, 
+			Validating, 
+			Warning, 
+			Starting, 
+			Information 
+		}
 		private string _message = string.Empty;
 		private ImportStep _step = ImportStep.Starting;
 		private int _percent = 0;
@@ -87,13 +95,14 @@ namespace ImportCA
 
 		}
 
-		private string ExtractFile(string pathFile)
+
+		private string ExtractFile(string pathFile, string directory)
 		{
 
             this._progress?.Report(new ImportProgress()
             {
                 Message = "\nDescompactando arquivo.",
-                Step = ImportProgress.ImportStep.Extract
+                Step = ImportProgress.ImportStep.Unpacking
             });
 
             if (this._settingsJson is null)
@@ -109,7 +118,7 @@ namespace ImportCA
 
 				) ?? throw new FileNotFoundException("O arquivo compactado não foi encontrado.");
 
-				string unpackedFilePath = Path.Combine(this._tmpFolderPath, entry.Name);
+				string unpackedFilePath = Path.Combine(directory, entry.Name);
 
 				entry.ExtractToFile(unpackedFilePath);
 
@@ -152,11 +161,13 @@ namespace ImportCA
             string tmpDownloadedPath = string.Empty;
 			string unpackedFilePath = string.Empty;
 
+			using var manageFileFtp = new ManagementFileFtpService();
+
 			using (var ftp = new AsyncFtpClient(this._settingsJson.HostFtpServer, this._settingsJson.UserName, ftpPass))
 			{
                 this._progress?.Report(new ImportProgress()
                 {
-                    Message = "\nEstabelecendo conexão com servidor...",
+                    Message = "Estabelecendo conexão com servidor...",
                     Step = ImportProgress.ImportStep.Validating
                 });
 
@@ -165,10 +176,10 @@ namespace ImportCA
 
                 this._progress?.Report(new ImportProgress()
                 {
-                    Message = "\nConexão estabelecida com sucesso...",
+                    Message = "Conexão estabelecida com sucesso...",
                     Step = ImportProgress.ImportStep.Information
                 });
-
+				
                 //Lança exceção se não existir nenhum diretório dentro do servidor informado pelo arquivo de configuração.
                 if (!await ftp.DirectoryExists(this._settingsJson.HostDirectory))
 				{
@@ -177,7 +188,7 @@ namespace ImportCA
 
                 this._progress?.Report(new ImportProgress()
                 {
-                    Message = "\nLocalizando arquivo...",
+                    Message = "Localizando arquivo...",
                     Step = ImportProgress.ImportStep.Information
                 });
 
@@ -199,7 +210,7 @@ namespace ImportCA
 				//Obtendo a extensão do arquivo localizado.
 				string remotefileExtension = Path.GetExtension(file.Name) ??
 												throw new NotSupportedException("O arquivo informado não contém nenhuma extensão definida.");
-
+				
 				if (remotefileExtension != this._settingsJson.ExpectedHostFileExtension)
 				{
 					throw new NotSupportedException($"O arquivo localizado \"{file.Name}\" não é do tipo esperado informado no arquivo de configuração.");
@@ -207,11 +218,10 @@ namespace ImportCA
 
                 this._progress?.Report(new ImportProgress()
                 {
-                    Message = "\nArquivo foi localizado com sucesso.",
+                    Message = "Arquivo foi localizado com sucesso.",
                     Step = ImportProgress.ImportStep.Information
                 });
 
-				using var manageFileFtp = new ManagementFileFtpService();
 				manageFileFtp.CreateTempFolder();
 
 				//Caminhho para o arquivo baixo temporariamente
@@ -235,12 +245,12 @@ namespace ImportCA
 
                 this._progress?.Report(new ImportProgress()
                 {
-                    Message = $"\nDownlaod realizado com sucesso.",
+                    Message = $"Downlaod realizado com sucesso.",
                     Step = ImportProgress.ImportStep.Information
                 });
             }
 
-			unpackedFilePath = (ManagementFileFtpService.IsCompressedFile(tmpDownloadedPath)) ? this.ExtractFile(tmpDownloadedPath) : tmpDownloadedPath;
+			unpackedFilePath = (ManagementFileFtpService.IsCompressedFile(tmpDownloadedPath)) ? this.ExtractFile(tmpDownloadedPath, manageFileFtp.TempFolderPath) : tmpDownloadedPath;
 
 			if (!ApplicationFtpService.IsSupportedExtension(Path.GetExtension(unpackedFilePath)))
 			{
@@ -257,13 +267,13 @@ namespace ImportCA
 			}
 			catch (Exception ex)
 			{
-				fullPath = ManagementFileFtpService.SolvePath(this._settingsJson.InternalFileNameContains, this._settingsJson.ExpectedInternalExtension, , fileName);
+				fullPath = ManagementFileFtpService.SolvePath(this._settingsJson.InternalFileNameContains, this._settingsJson.ExpectedInternalExtension, ApplicationFtpService.DownloadsFolder , fileName);
                 pathResult = ManagementFileFtpService.MoveEx(unpackedFilePath, fullPath);
 
                 this._progress?.Report(new ImportProgress()
                 {
-                    Message = $"\nArquivo movido para a pasta padrão de downloads, pois o diretório informado exige um nível permissões elevadas.\n\nDetalhes: {ex.Message}",
-                    Step = ImportProgress.ImportStep.Information
+                    Message = $"Arquivo movido para a pasta padrão de downloads, pois o diretório informado exige um nível permissões elevadas.\n\nDetalhes: {ex.Message}",
+                    Step = ImportProgress.ImportStep.Warning
                 });
             }
 

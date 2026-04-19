@@ -104,6 +104,12 @@ namespace ImportCA.FtpFileManagement
 				throw new ArgumentException("O caminho informado corresponde a um arquivo existente. Informe um diretório válido.");
 			}
 
+			//Exceção se o diretório inforamdo não existe
+			if (!Directory.Exists(directory))
+			{
+				throw new DirectoryNotFoundException("O diretório informado não existe.");
+			}
+
 			fileName = (!Path.HasExtension(fileName) || Path.GetExtension(fileName) != defaultFileExtension) ?
 			Path.ChangeExtension(fileName, defaultFileExtension) :
 			fileName;
